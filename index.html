@@ -6,6 +6,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
   <title>StreamVault Mobile</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <style>
@@ -407,6 +408,38 @@
       transform: scale(0.95);
     }
 
+    /* Player protection overlay */
+    .player-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      cursor: pointer;
+      backdrop-filter: blur(5px);
+    }
+
+    .player-overlay-content {
+      text-align: center;
+      color: white;
+    }
+
+    .player-overlay-content i {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      opacity: 0.9;
+    }
+
+    .player-overlay-content p {
+      font-size: 1rem;
+      opacity: 0.8;
+    }
+
     /* Modal Content */
     .modal-content {
       padding: 1.5rem 1rem;
@@ -791,6 +824,211 @@
   </nav>
 
   <script>
+    // ============================================
+    // AD BLOCKING & POPUP PREVENTION SYSTEM
+    // ============================================
+    
+    // Block popups and new windows
+    (function() {
+      const originalOpen = window.open;
+      window.open = function(url, name, specs) {
+        console.log('Blocked popup attempt:', url);
+        return null;
+      };
+      
+      // Prevent window.open overrides
+      Object.defineProperty(window, 'open', {
+        value: function() {
+          console.log('Blocked popup override');
+          return null;
+        },
+        writable: false,
+        configurable: false
+      });
+    })();
+
+    // Block onclick redirects on iframes
+    document.addEventListener('click', function(e) {
+      const iframe = document.getElementById('player-iframe');
+      if (iframe && e.target !== iframe) {
+        // Allow clicks outside iframe
+        return;
+      }
+    }, true);
+
+    // Prevent new tab/window creation
+    window.addEventListener('beforeunload', function(e) {
+      // Check if it's a legitimate navigation
+      if (!document.activeElement || document.activeElement.tagName !== 'A') {
+        e.preventDefault();
+        return;
+      }
+    });
+
+    // Block common ad domains and tracking
+    const blockedDomains = [
+      'doubleclick.net',
+      'googlesyndication.com',
+      'googleadservices.com',
+      'google-analytics.com',
+      'facebook.com/tr',
+      'connect.facebook.net',
+      'amazon-adsystem.com',
+      'advertising.com',
+      'adsrvr.org',
+      'adnxs.com',
+      'rubiconproject.com',
+      'pubmatic.com',
+      'openx.net',
+      'mathtag.com',
+      'adsafeprotected.com',
+      'moatads.com',
+      'outbrain.com',
+      'taboola.com',
+      'zedo.com',
+      'advertising.com',
+      'criteo.com',
+      'bidswitch.net',
+      'rlcdn.com',
+      'adform.net',
+      'serving-sys.com',
+      'advertising.com',
+      'casalemedia.com',
+      'quantserve.com',
+      'scorecardresearch.com',
+      'bluekai.com',
+      'exoclick.com',
+      'popads.net',
+      'popcash.net',
+      'propellerads.com',
+      'adsterra.com',
+      'hilltopads.net',
+      'juicyads.com',
+      'trafficjunky.com',
+      'exosrv.com',
+      'tsyndicate.com',
+      'clickadu.com',
+      'adspyglass.com'
+    ];
+
+    // Intercept fetch and XMLHttpRequest to block ad requests
+    const originalFetch = window.fetch;
+    window.fetch = function(...args) {
+      const url = args[0];
+      if (typeof url === 'string' && blockedDomains.some(domain => url.includes(domain))) {
+        console.log('Blocked ad request:', url);
+        return Promise.reject(new Error('Blocked'));
+      }
+      return originalFetch.apply(this, args);
+    };
+
+    // Block focus stealing
+    let userInteracted = false;
+    document.addEventListener('click', () => userInteracted = true, { once: true });
+    document.addEventListener('touchstart', () => userInteracted = true, { once: true });
+
+    window.addEventListener('blur', function(e) {
+      if (!userInteracted) {
+        setTimeout(() => window.focus(), 10);
+      }
+    });
+
+    // Prevent onclick hijacking on iframe
+    function setupIframeProtection() {
+      const iframe = document.getElementById('player-iframe');
+      const playerContainer = document.getElementById('player-container');
+      if (!iframe || !playerContainer) return;
+
+      // Remove existing overlay if any
+      const existingOverlay = playerContainer.querySelector('.player-overlay');
+      if (existingOverlay) {
+        existingOverlay.remove();
+      }
+
+      // Create overlay to catch initial click and prevent ads
+      let clickCount = 0;
+      const overlay = document.createElement('div');
+      overlay.className = 'player-overlay';
+      overlay.innerHTML = `
+        <div class="player-overlay-content">
+          <i class="fas fa-play-circle"></i>
+          <p>Click to load player</p>
+        </div>
+      `;
+
+      overlay.addEventListener('click', function(e) {
+        e.stopPropagation();
+        clickCount++;
+        
+        if (clickCount === 1) {
+          // First click - show loading
+          overlay.innerHTML = `
+            <div class="player-overlay-content">
+              <i class="fas fa-spinner fa-spin"></i>
+              <p>Loading player...</p>
+            </div>
+          `;
+          
+          // Remove overlay after a short delay
+          setTimeout(() => {
+            overlay.style.opacity = '0';
+            setTimeout(() => {
+              overlay.style.display = 'none';
+            }, 300);
+          }, 800);
+        }
+      });
+
+      overlay.style.transition = 'opacity 0.3s ease';
+      playerContainer.appendChild(overlay);
+
+      // Reset on server change
+      window.resetOverlay = function() {
+        clickCount = 0;
+        overlay.style.display = 'flex';
+        overlay.style.opacity = '1';
+        overlay.innerHTML = `
+          <div class="player-overlay-content">
+            <i class="fas fa-play-circle"></i>
+            <p>Click to load player</p>
+          </div>
+        `;
+      };
+    }
+
+    // Monitor for malicious redirects
+    let lastUrl = window.location.href;
+    setInterval(function() {
+      if (window.location.href !== lastUrl) {
+        console.log('Detected redirect, reverting...');
+        window.history.replaceState(null, '', lastUrl);
+      }
+    }, 100);
+
+    // Prevent context menu on iframe (some ads use this)
+    document.addEventListener('contextmenu', function(e) {
+      if (e.target.tagName === 'IFRAME') {
+        e.preventDefault();
+        return false;
+      }
+    });
+
+    // Block notification requests
+    if ('Notification' in window) {
+      Notification.requestPermission = function() {
+        return Promise.resolve('denied');
+      };
+    }
+
+    // Disable service workers that might be used for ads
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(registrations) {
+        for(let registration of registrations) {
+          registration.unregister();
+        }
+      });
+    }
+
     // API Configuration
     const API_KEY = atob('NDU2MDM5ZWVhNTk2OTFlY2Y4ZGIzMzkyYWZjZWFiZTA=');
     const BASE_URL = atob('aHR0cHM6Ly9hcGkudGhlbW92aWVkYi5vcmcvMw==');
@@ -899,6 +1137,11 @@
       modal.classList.add('active');
       document.body.classList.add('modal-open');
       document.body.style.overflow = 'hidden';
+      
+      // Initialize iframe protection after a short delay
+      setTimeout(() => {
+        setupIframeProtection();
+      }, 1000);
     }
 
     // Change server
@@ -920,6 +1163,13 @@
       }
 
       document.getElementById('player-iframe').src = embedURL;
+      
+      // Reset overlay protection after server change
+      setTimeout(() => {
+        if (window.resetOverlay) {
+          window.resetOverlay();
+        }
+      }, 500);
     }
 
     // Close modal
