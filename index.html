@@ -783,12 +783,34 @@
           <i class="fas fa-server"></i> Select Server
         </label>
         <select id="server-select" class="server-select" onchange="changeServer()">
-          <option value="vidsrc.cc">Server 1</option>
-          <option value="vidsrc.me">Server 2</option>
-          <option value="player.videasy.net">Server 3</option>
-          <option value="moviesapi.to">Server 4</option>
-          <option value="player.embed-api.stream">Server 5</option>
+          <option value="vidsrc.cc">Server 1 - VidSrc</option>
+          <option value="vidsrc.me">Server 2 - VidSrc Pro</option>
+          <option value="player.videasy.net">Server 3 - Videasy</option>
+          <option value="moviesapi.to">Server 4 - MoviesAPI</option>
+          <option value="embed-api.stream">Server 5 - Embed API</option>
         </select>
+      </div>
+
+      <!-- Season/Episode Selector for TV Shows (Server 5) -->
+      <div class="episode-section" id="episode-section" style="display: none;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <label class="server-label" for="season-select">
+              <i class="fas fa-list"></i> Season
+            </label>
+            <select id="season-select" class="server-select" onchange="updateEpisodePlayer()">
+              <option value="1">Season 1</option>
+            </select>
+          </div>
+          <div>
+            <label class="server-label" for="episode-select">
+              <i class="fas fa-play-circle"></i> Episode
+            </label>
+            <select id="episode-select" class="server-select" onchange="updateEpisodePlayer()">
+              <option value="1">Episode 1</option>
+            </select>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1161,6 +1183,25 @@
         embedURL = `${atob('aHR0cHM6Ly9wbGF5ZXIudmlkZWFzeS5uZXQ=')}/${type}/${currentItem.id}`;
       } else if (server === 'moviesapi.to') {
         embedURL = `${atob('aHR0cHM6Ly9wbGF5ZXIudmlkZWFzeS5uZXQ=')}/${type}/${currentItem.id}`;
+      } else if (server === 'embed-api.stream') {
+        // Server 5: Uses TMDB ID directly without movie/tv prefix
+        if (type === 'movie') {
+          embedURL = `https://player.embed-api.stream/?id=${currentItem.id}`;
+        } else {
+          // For TV shows, show episode selector and load first episode by default
+          const season = document.getElementById('season-select').value || '1';
+          const episode = document.getElementById('episode-select').value || '1';
+          embedURL = `https://player.embed-api.stream/?id=${currentItem.id}&s=${season}&e=${episode}`;
+          
+          // Show episode selector for TV shows
+          document.getElementById('episode-section').style.display = 'block';
+          populateSeasonEpisodes();
+        }
+      }
+
+      // Hide episode selector for non-Server 5 or movies
+      if (server !== 'embed-api.stream' || type === 'movie') {
+        document.getElementById('episode-section').style.display = 'none';
       }
 
       document.getElementById('player-iframe').src = embedURL;
@@ -1171,6 +1212,51 @@
           window.resetOverlay();
         }
       }, 500);
+    }
+
+    // Update player for Server 5 episode changes
+    function updateEpisodePlayer() {
+      const server = document.getElementById('server-select').value;
+      if (server !== 'embed-api.stream' || !currentItem) return;
+
+      const season = document.getElementById('season-select').value;
+      const episode = document.getElementById('episode-select').value;
+      const embedURL = `https://player.embed-api.stream/?id=${currentItem.id}&s=${season}&e=${episode}`;
+      
+      document.getElementById('player-iframe').src = embedURL;
+      
+      // Reset overlay protection
+      setTimeout(() => {
+        if (window.resetOverlay) {
+          window.resetOverlay();
+        }
+      }, 500);
+    }
+
+    // Populate season and episode dropdowns (generic - 10 seasons, 20 episodes each)
+    function populateSeasonEpisodes() {
+      const seasonSelect = document.getElementById('season-select');
+      const episodeSelect = document.getElementById('episode-select');
+      
+      // Clear existing options
+      seasonSelect.innerHTML = '';
+      episodeSelect.innerHTML = '';
+      
+      // Add 10 seasons (most shows don't exceed this)
+      for (let i = 1; i <= 10; i++) {
+        const option = document.createElement('option');
+        option.value = i;
+        option.textContent = `Season ${i}`;
+        seasonSelect.appendChild(option);
+      }
+      
+      // Add 20 episodes per season (cover most cases)
+      for (let i = 1; i <= 20; i++) {
+        const option = document.createElement('option');
+        option.value = i;
+        option.textContent = `Episode ${i}`;
+        episodeSelect.appendChild(option);
+      }
     }
 
     // Close modal
@@ -1414,4 +1500,3 @@
   </script>
 </body>
 </html>
-
